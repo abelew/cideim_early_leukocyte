@@ -1,0 +1,652 @@
+---
+title: "L.panamensis 202007: Differential Expression in human macrophages."
+author: "atb abelew@gmail.com"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::readthedown:
+    code_download: true
+    code_folding: show
+    df_print: paged
+    fig_caption: true
+    fig_height: 7
+    fig_width: 7
+    highlight: tango
+    width: 300
+    keep_md: false
+    mode: selfcontained
+    toc_float: true
+  BiocStyle::html_document:
+    code_download: true
+    code_folding: show
+    fig_caption: true
+    fig_height: 7
+    fig_width: 7
+    highlight: tango
+    keep_md: false
+    mode: selfcontained
+    toc_float: true
+  html_document:
+    code_download: true
+    code_folding: show
+    fig_caption: true
+    fig_height: 7
+    fig_width: 7
+    highlight: tango
+    keep_md: false
+    mode: selfcontained
+    number_sections: true
+    self_contained: true
+    theme: readable
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+---
+
+<style type="text/css">
+body, td {
+  font-size: 16px;
+}
+code.r{
+  font-size: 16px;
+}
+pre {
+ font-size: 16px
+}
+</style>
+
+```{r options, include=FALSE}
+library("hpgltools")
+tt <- devtools::load_all("/data/hpgltools")
+knitr::opts_knit$set(progress=TRUE,
+                     verbose=TRUE,
+                     width=90,
+                     echo=TRUE)
+knitr::opts_chunk$set(error=TRUE,
+                      fig.width=8,
+                      fig.height=8,
+                      dpi=96)
+old_options <- options(digits=4,
+                       stringsAsFactors=FALSE,
+                       knitr.duplicate.label="allow")
+ggplot2::theme_set(ggplot2::theme_bw(base_size=10))
+rundate <- format(Sys.Date(), format="%Y%m%d")
+previous_file <- "index.Rmd"
+ver <- "20200706"
+
+##tmp <- sm(loadme(filename=paste0(gsub(pattern="\\.Rmd", replace="", x=previous_file), "-v", ver, ".rda.xz")))
+rmd_file <- "macrophage_all_analyses_202007.Rmd"
+```
+
+# Annotation version: `r ver`
+
+## Genome annotation input
+
+There are a few methods of importing annotation data into R.  The following are
+two attempts, the second is currently being used in these analyses.
+
+```{r make_orgdb}
+meta <- EuPathDB::download_eupath_metadata(webservice="tritrypdb")
+
+lm_entry <- EuPathDB::get_eupath_entry(species="Leishmania major", metadata=meta)
+lp_entry <- EuPathDB::get_eupath_entry(species="Leishmania panamensis", metadata=meta)
+lmex_entry <- EuPathDB::get_eupath_entry(species="Leishmania mexicana", metadata=meta)
+lama_entry <- EuPathDB::get_eupath_entry(species="Leishmania amazonensis", metadata=meta)
+lb_entry <- EuPathDB::get_eupath_entry(species="2904", metadata=meta)
+ld_entry <- EuPathDB::get_eupath_entry(species="donovani", metadata=meta)
+crit_entry <- EuPathDB::get_eupath_entry(species="Crith", metadata=meta)
+
+testing_panamensis <- EuPathDB::make_eupath_orgdb(entry=lp_entry)
+testing_braziliensis <- EuPathDB::make_eupath_orgdb(entry=lb_entry)
+testing_donovani <- EuPathDB::make_eupath_orgdb(entry=ld_entry)
+testing_mexicana <- EuPathDB::make_eupath_orgdb(entry=lmex_entry)
+testing_major <- EuPathDB::make_eupath_orgdb(entry=lm_entry)
+testing_crith <- EuPathDB::make_eupath_orgdb(entry=crit_entry)
+```
+
+Assuming the above packages got created, we may load them and extract the
+annotation data.
+
+```{r lpanamensis_orgdb}
+wanted_fields <- c("annot_cds_length", "annot_chromosome", "annot_gene_entrez_id",
+                   "annot_gene_name", "annot_strand", "gid", "go_go_id",
+                   "go_go_term_name", "go_ontology",
+                   "interpro_description" ,"interpro_e_value", "type_gene_type")
+
+lm_org <- sm(EuPathDB::load_eupath_annotations(query=lm_entry))
+lp_org <- sm(EuPathDB::load_eupath_annotations(query=lp_entry))
+lb_org <- sm(EuPathDB::load_eupath_annotations(query=lb_entry))
+ld_org <- sm(EuPathDB::load_eupath_annotations(query=ld_entry))
+lmex_org <- sm(EuPathDB::load_eupath_annotations(query=lmex_entry))
+cf_ort <- sm(EuPathDB::load_eupath_annotations(query=crit_entry))
+```
+
+## Read a gff file
+
+In contrast, it is possible to load most annotations of interest directly from
+the gff files used in the alignments.  More in-depth information for the human
+transcriptome may be extracted from biomart.
+
+```{r genome_input}
+## The old way of getting genome/annotation data
+lp_gff <- "reference/lpanamensis.gff"
+lb_gff <- "reference/lbraziliensis.gff"
+hs_gff <- "reference/hsapiens.gtf"
+
+lp_fasta <- "reference/lpanamensis.fasta.xz"
+lb_fasta <- "reference/lbraziliensis.fasta.xz"
+hs_fasta <- "reference/hsapiens.fasta.xz"
+
+lp_annotations <- sm(load_gff_annotations(lp_gff, type="gene"))
+rownames(lp_annotations) <- paste0("exon_", lp_annotations$web_id, ".1")
+
+lb_annotations <- sm(load_gff_annotations(lb_gff, type="gene"))
+
+hs_gff_annot <- sm(load_gff_annotations(hs_gff, id_col="gene_id"))
+hs_annotations <- sm(load_biomart_annotations())$annotation
+hs_annotations$ID <- hs_annotations$geneID
+rownames(hs_annotations) <- make.names(hs_annotations[["ensembl_gene_id"]], unique=TRUE)
+dim(hs_annotations)
+
+lp_size_dist <- plot_histogram(lp_annotations[["width"]])
+lp_size_dist
+
+hs_size_dist <- plot_histogram(hs_annotations[["cds_length"]])
+hs_size_dist +
+  ggplot2::scale_x_continuous(limits=c(0, 20000))
+```
+
+## Extracting Cell Types
+
+Maria Adelaida requested adding the xCell cell types to the data.
+
+```{r xCell_data}
+library(xCell)
+data("xCell.data", package="xCell")
+summary(xCell.data)
+library(GSEABase)
+details(xCell.data$signatures[[1]])
+
+sigs <- xCell.data$signatures
+head(names(sigs), n=10)
+## Here we see that the signatures are encoded as 3 element lists, the first element is the
+## cell type, followed by source, followed by replicate.txt.
+cell_types <- unlist(lapply(strsplit(x=names(sigs), split="%"), function(x) { x[[1]] }))
+cell_sources <- unlist(lapply(strsplit(x=names(sigs), split="%"), function(x) { x[[2]] }))
+type_fact <- as.factor(cell_types)
+types <- levels(type_fact)
+
+celltypes_to_genes <- list()
+for (c in 1:length(types)) {
+  type <- types[c]
+  idx <- cell_types == type
+  set <- sigs[idx]
+  genes <- set %>%
+    geneIds() %>%
+    unlist()
+  celltypes_to_genes[[type]] <- as.character(genes)
+}
+genes_to_celltypes <- Biobase::reverseSplit(celltypes_to_genes)
+
+g2c_df <- data.frame(row.names=unique(names(genes_to_celltypes)))
+g2c_df[["found"]] <- 0
+for (c in 1:length(celltypes_to_genes)) {
+  celltype_name <- names(celltypes_to_genes)[[c]]
+  message("Starting ", c, ": ", celltype_name)
+  celltype_column <- as.data.frame(celltypes_to_genes[[c]])
+  colnames(celltype_column) <- celltype_name
+  rownames(celltype_column) <- make.names(celltype_column[[1]], unique=TRUE)
+  celltype_column[[1]] <- TRUE
+  g2c_df <- merge(g2c_df, celltype_column, by="row.names", all.x=TRUE)
+  rownames(g2c_df) <- g2c_df[[1]]
+  g2c_df <- g2c_df[, -1]
+}
+head(g2c_df)
+na_idx <- is.na(g2c_df)
+g2c_df[na_idx] <- FALSE
+```
+
+## Getting ontology data
+
+Annotation for gene ontologies may be gathered from a similarly large number of
+sources. The following are a couple.
+
+```{r ontology1}
+## Try using biomart
+hs_go <- sm(load_biomart_go())
+## or the org.Hs.eg.db sqlite database
+tt <- sm(library("Homo.sapiens"))
+hs <- Homo.sapiens
+##hs_go_ensembl <- load_orgdb_go(hs, hs_annotations$geneID)
+##dim(hs_go_biomart)
+##dim(hs_go_ensembl)
+##hs_goids <- hs_go_biomart
+
+## While testing, I called this desc, that will need to change.
+##lp_tooltips <- make_tooltips(lp_annotations)
+##lb_tooltips <- make_tooltips(lb_annotations)
+
+lp_lengths <- lp_annotations[, c("ID", "width")]
+lb_lengths <- lb_annotations[, c("ID", "width")]
+hs_lengths <- hs_annotations[, c("ensembl_gene_id", "cds_length")]
+colnames(hs_lengths) <- c("ID", "width")
+
+lp_goids <- read.csv(file="reference/lpan_go.txt.xz", sep="\t", header=FALSE)
+lb_goids <- read.csv(file="reference/lbraz_go.txt.xz", sep="\t", header=FALSE)
+colnames(lp_goids) <- c("ID","GO","ont","name","source","tag")
+colnames(lb_goids) <- c("ID","GO","ont","name","source","tag")
+```
+
+# Putting the pieces together
+
+The macrophage experiment has samples across 2 contexts, the host and parasite.
+The following block sets up one experiment for each.  If you open the
+all_samples-species.xlsx files, you will note immediately that a few different
+attempts were made at ascertaining the most likely experimental factors that
+contributed to the readily apparent batch effects.
+
+## The human transcriptome mappings
+
+Keep in mind that if I change the experimental design with new annotations, I
+must therefore regenerate the following.
+
+```{r hs_expt}
+hs_final_annotations <- hs_annotations
+hs_final_annotations <- hs_final_annotations[, c("ensembl_transcript_id", "ensembl_gene_id", "cds_length",
+                                                 "hgnc_symbol", "description", "gene_biotype")]
+hs_final_annotations$rn <- rownames(hs_final_annotations)
+note <- "New experimental design factors by snp added 2016-09-20"
+hs_final_annotations <- merge(hs_final_annotations, g2c_df,
+                              by.x="hgnc_symbol", by.y="row.names", all.x=TRUE)
+rownames(hs_final_annotations) <- hs_final_annotations$rn
+hs_final_annotations$rn <- NULL
+na_idx <- is.na(hs_final_annotations$xcell_types)
+hs_final_annotations[na_idx, "xcell_types"] <- ""
+
+hs_macr <- create_expt(
+    metadata=glue::glue("sample_sheets/macrophage_samples_{ver}.xlsx"),
+    gene_info=hs_final_annotations,
+    file_column="humanfile",
+    notes=note)
+hs_annotations <- fData(hs_macr)
+undef_idx <- hs_annotations == "undefined"
+hs_annotations[undef_idx] <- FALSE
+fData(hs_macr[["expressionset"]]) <- hs_annotations
+
+knitr::kable(head(hs_macr$design, n=1))
+
+##cds_entries <- fData(hs_macr)
+##cds_entries <- cds_entries[["gene_biotype"]] == "protein_coding"
+##hs_cds_macr <- hs_macr
+##hs_cds_macr$expressionset <- hs_cds_macr$expressionset[cds_entries, ]
+##new_cds_entries <- fData(hs_cds_macr)
+hs_cds_macr <- exclude_genes_expt(hs_macr, method="keep",
+                                  column="gene_biotype",
+                                  patterns="protein_coding")
+```
+
+## The parasite transcriptome mappings
+
+```{r parasite_expt}
+lp_macr <- sm(create_expt(
+    metadata=glue::glue("sample_sheets/macrophage_samples_{ver}.xlsx"),
+    gene_info=lp_annotations, file_column="parasitefile"))
+knitr::kable(head(lp_macr$design, n=3),
+             caption="The first three rows of the parasite experimental design.")
+```
+
+# Supplemental Table 1
+
+Table S1 is going to be a summary of the metadata in all_samples-combined
+This may also include some of the numbers regarding mapping %, etc.
+
+Wanted columns:
+
+* Sample ID:  HPGLxxxx
+* Donor Code: TM130 or PG1xx
+* Cell Type:  Macrophage or PBMC
+* Infection Status:  Infected or Uninfected
+* Disease Outcome:  Chronic or Self-Healing or NA
+* Batch: A or B (macrophage); NA for PBMC
+* Number of reads that passed Illumina filter
+* Number of reads after trimming
+* Number of reads mapped - human
+* % reads mapped - human
+* Number of reads mapped - L.panamensis
+* % reads mapped - L.panamensis
+
+This table is maintained as an excel file in the sample_sheets/ directory.
+
+# Sample Estimation, Macrophages: `r ver`
+
+This document is concerned with analyzing RNAseq data of human and parasite during the infection of
+human macrophages.  A few different strains of L. panamensis were used; the experiment is therefore
+segregated into groups named 'self-healing', 'chronic', and 'uninfected'.  Two separate sets of
+libraries were generated, one earlier set with greater coverage, and a later set including only 1
+uninfected sample, and 2-3 chronic samples.
+
+## Extract the macrophage experiment
+
+The following subset operation extract the samples used for the macrophage experiment. The next
+three lines then change the colors from the defaults.
+
+```{r macrophages}
+new_colors <- c("#009900", "#990000", "#000099")
+names(new_colors) <- c("uninf", "chr", "sh")
+
+hs_macr <- set_expt_colors(hs_macr, colors=new_colors)
+labels <- as.character(pData(hs_macr)[["label"]])
+hs_macr <- set_expt_samplenames(hs_macr, labels)
+
+hs_cds_macr <- set_expt_colors(hs_cds_macr, colors=new_colors)
+hs_cds_macr <- set_expt_samplenames(hs_cds_macr, labels)
+```
+
+# Compare methods
+
+In our meeting this morning (20190708), Najib and Maria Adelaida asked for how
+the data looks depending on batch methodology.
+
+```{r batch_methods}
+start <- sm(normalize_expt(hs_cds_macr, filter=TRUE, convert="cpm",
+                           norm="quant", transform="log2"))
+pp(file="cpm_quant_filter_pca.png", image=plot_pca(start)$plot)
+
+limma_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
+                                 convert="cpm", norm="quant",
+                                 transform="log2", batch="limma"))
+pp(file="lcqf_limma.png", image=plot_pca(limma_batch)$plot)
+
+pca_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
+                               convert="cpm", norm="quant",
+                               transform="log2", batch="pca"))
+pp(file="lcqf_pca.png", image=plot_pca(pca_batch)$plot)
+
+svaseq_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
+                                  convert="cpm",
+                                  transform="log2", batch="svaseq"))
+pp(file="lcqf_svaseq.png", image=plot_pca(svaseq_batch)$plot)
+
+sva_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
+                               convert="cpm",
+                               transform="log2", batch="fsva"))
+pp(file="lcqf_sva.png", image=plot_pca(sva_batch)$plot)
+
+combat_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
+                                  convert="cpm",
+                                  transform="log2", batch="combat"))
+pp(file="lcqf_combat.png", image=plot_pca(combat_batch)$plot)
+
+combatnp_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
+                                    convert="cpm",
+                                    transform="log2", batch="combat_noprior"))
+pp(file="lcqf_combatnp.png", image=plot_pca(combatnp_batch)$plot)
+```
+
+# Figure S1
+
+Figure S1 should include nice versions of the sample metrics.
+The normalization chosen is batch-in-model.
+
+First, however, we will make some plots of the raw data.
+
+Sample names are going to be 'infectionstate_strainnumber' : chr_7721
+
+* Panel A: Library sizes.
+* Panel B: Heatmap distance raw.
+* Panel C: PCA
+* Panel D: TSNE
+
+```{r fig_s1_write, fig.show="hide"}
+fig_s1 <- sm(write_expt(
+    hs_cds_macr, norm="raw", violin=FALSE, convert="cpm",
+    transform="log2", batch="svaseq", filter=TRUE,
+    excel=paste0("excel/figure_s1_sample_estimation-v", ver, ".xlsx")))
+
+pp(file="fig_s1a_libsizes.tif", image=fig_s1$raw_libsize)
+pp(file="fig_s1b_heatmap.tif", image=fig_s1$norm_disheat)
+pp(file="fig_s1c_raw_pca.tif", image=fig_s1$raw_scaled_pca)
+pp(file="fig_1a_norm_pca.tif", image=fig_s1$norm_pca)
+```
+
+# Differential Expression, Macrophage: `r ver`
+
+# Differential expression analyses
+
+The most likely batch method from the above is svaseq.  Let us perform
+differential expression analyses with it along with a few other methods.
+
+```{r setup_de_norm, fig.show="hide"}
+hs_contrasts <- list(
+    "macro_chr-sh" = c("chr","sh"),
+    "macro_chr-nil" = c("chr","uninf"),
+    "macro_sh-nil" = c("sh", "uninf"))
+## Set up the data used in the comparative contrast sets.
+```
+
+## No batch in the model
+
+### Set up no batch
+
+Print a reminder of what we can expect when doing this with no batch information.
+
+```{r nobatch_setup}
+hs_macr_lowfilt <- sm(normalize_expt(hs_cds_macr, filter=TRUE))
+hs_lowfilt_pca <- sm(plot_pca(hs_cds_macr, transform="log2"))
+hs_lowfilt_pca$plot
+```
+
+```{r macro_nobatch1, fig.show="hide"}
+hs_macr_nobatch <- all_pairwise(input=hs_cds_macr, model_batch=FALSE,
+                                limma_method="robust")
+## wow, all tools including basic agree almost completely
+medians_by_condition <- hs_macr_nobatch$basic$medians
+excel_file <- glue::glue("excel/{rundate}_hs_macr_nobatch_contr-v{ver}.xlsx")
+hs_macr_nobatch_tables <- sm(combine_de_tables(hs_macr_nobatch,
+                                               excel=excel_file,
+                                               keepers=hs_contrasts,
+                                               extra_annot=medians_by_condition))
+excel_file <- glue::glue("excel/{rundate}_hs_macr_nobatch_sig-v{ver}.xlsx")
+hs_macr_nobatch_sig <- sm(extract_significant_genes(hs_macr_nobatch_tables,
+                                                    excel=excel_file,
+                                                    according_to="all"))
+```
+
+## Batch in the model
+
+### Batch setup
+
+```{r batch_setup}
+hs_lowfilt_batch_pca <- sm(plot_pca(hs_cds_macr, transform="log2",
+                                    convert="cpm", batch="limma", filter=TRUE))
+hs_lowfilt_batch_pca$plot
+```
+
+In this  attempt, we add a batch factor in the experimental model and see how it does.
+
+```{r macro_batch1, fig.show="hide"}
+## Here just let all_pairwise run on filtered data and do its normal ~ 0 + condition + batch analyses
+hs_macr_batch <- all_pairwise(input=hs_cds_macr, batch=TRUE, limma_method="robust")
+medians_by_condition <- hs_macr_batch$basic$medians
+excel_file <- glue::glue("excel/{rundate}_hs_macr_batchmodel_contr-v{ver}.xlsx")
+hs_macr_batch_tables <- combine_de_tables(
+  hs_macr_batch,
+  keepers=hs_contrasts,
+  extra_annot=medians_by_condition,
+  excel=excel_file)
+excel_file <- glue::glue("excel/{rundate}_hs_macr_batchmodel_sig-v{ver}.xlsx")
+hs_macr_batch_sig <- extract_significant_genes(
+  hs_macr_batch_tables, excel=excel_file,
+  according_to="deseq")
+excel_file <- glue::glue("excel/{rundate}_hs_macr_batchmodel_abund-v{ver}.xlsx")
+hs_macr_batch_abun <- sm(extract_abundant_genes(
+  hs_macr_batch_tables, excel=excel_file,
+  according_to="deseq"))
+```
+
+## SVA
+
+### sva setup
+
+```{r sva_setup}
+hs_lowfilt_sva_pca <- sm(plot_pca(hs_cds_macr, transform="log2",
+                                  convert="cpm", batch="svaseq", filter=TRUE))
+hs_lowfilt_sva_pca$plot
+```
+
+In this  attempt, we tell all pairwise to invoke svaseq.
+
+```{r macro_sva, fig.show="hide"}
+hs_macr_sva <- all_pairwise(input=hs_cds_macr, model_batch="svaseq", filter=TRUE, limma_method="robust")
+medians_by_condition <- hs_macr_sva$basic$medians
+excel_file <- glue::glue("excel/{rundate}_hs_macr_svamodel_contr-v{ver}.xlsx")
+hs_macr_sva_tables <- combine_de_tables(
+  hs_macr_sva,
+  keepers=hs_contrasts,
+  extra_annot=medians_by_condition,
+  excel=excel_file)
+excel_file <- glue::glue("excel/{rundate}_hs_macr_svamodel_sig-v{ver}.xlsx")
+hs_macr_sva_sig <- extract_significant_genes(
+    hs_macr_sva_tables, excel=excel_file,
+    according_to="deseq")
+excel_file <- glue::glue("excel/{rundate}_hs_macr_svamodel_abund-v{ver}.xlsx")
+hs_macr_sva_abun <- sm(extract_abundant_genes(
+    hs_macr_sva_tables, excel=excel_file,
+    according_to="deseq"))
+```
+
+## Combat
+
+As you know, combat actually changes the data, so it will require a slightly
+different setup.
+
+### combat setup
+
+```{r combat_setup}
+combatnp_input <- normalize_expt(hs_cds_macr, filter=TRUE,
+                                 convert="cpm",
+                                 batch="combat_noprior")
+```
+
+In this  attempt, we tell all pairwise to invoke svaseq.
+
+```{r macro_combat, fig.show="hide"}
+hs_macr_combat <- all_pairwise(input=combatnp_input, model_batch=FALSE,
+                               force=TRUE, limma_method="robust")
+excel_file <- glue::glue("excel/{rundate}_hs_macr_combat_contr-v{ver}.xlsx")
+hs_macr_combat_tables <- combine_de_tables(
+    hs_macr_combat,
+    keepers=hs_contrasts,
+    extra_annot=medians_by_condition,
+    excel=excel_file)
+excel_file <- glue::glue("excel/{rundate}_hs_macr_combat_sig-v{ver}.xlsx")
+hs_macr_combat_sig <- extract_significant_genes(
+  hs_macr_combat_tables, excel=excel_file,
+  according_to="deseq")
+excel_file <- glue::glue("excel/{rundate}_hs_macr_combat_abund-v{ver}.xlsx")
+hs_macr_combat_abun <- sm(extract_abundant_genes(
+  hs_macr_combat_tables, excel=excel_file,
+  according_to="deseq"))
+```
+
+## Compare these three results
+
+```{r compare_de_results}
+nobatch_batch <- compare_de_results(first=hs_macr_nobatch_tables,
+                                    second=hs_macr_batch_tables)
+nobatch_batch$logfc
+
+batch_sva <- compare_de_results(first=hs_macr_batch_tables,
+                                second=hs_macr_sva_tables)
+batch_sva$logfc
+
+batch_combat <- compare_de_results(first=hs_macr_batch_tables,
+                                   second=hs_macr_combat_tables)
+batch_combat$logfc
+
+sva_combat <- compare_de_results(first=hs_macr_sva_tables,
+                                 second=hs_macr_combat_tables)
+sva_combat$logfc
+## Interesting how much sva and combat disagree.
+```
+
+## Two likely volcano plots
+
+# TODO 202007
+
+1.  Change volcano plots to logFC 0.58.
+2.  Send figure S1 new versions with improved labels.
+
+```{r table_s2}
+batchmodel_volcano <- plot_volcano_de(
+    table=hs_macr_batch_tables[["data"]][["macro_chr-sh"]],
+    color_by="state",
+    fc_col="deseq_logfc",
+    p_col="deseq_adjp",
+    logfc=0.58,
+    shapes_by_state=FALSE,
+    line_position="top")
+batchmodel_volcano$plot
+
+svamodel_volcano <- plot_volcano_de(
+    table=hs_macr_sva_tables[["data"]][["macro_chr-sh"]],
+    color_by="state",
+    fc_col="deseq_logfc",
+    p_col="deseq_adjp",
+    logfc=0.58,
+    shapes_by_state=FALSE,
+    line_position="top")
+pp(file="sva_chsh_deseq_volcano.tif", image=svamodel_volcano$plot)
+```
+
+## PROPER
+
+```{r proper}
+hs_proper <- simple_proper(de_tables=hs_macr_batch_tables)
+```
+
+## Ontology searching against the sva results.
+
+Recall that I made the variables 'hs_macr_sva_sig' and 'hs_macr_sva_abun' to
+hold the results of the most significantly changed and abundant genes.
+
+gProfiler is my favorite tool for ontology searching, however they recently had
+a big update and split their code.  The new version has all sorts of cool toys,
+but as of the last time I tried it, did not work.  Thus the following is still
+using the older methods.
+
+```{r ontology2}
+lfs_up <- hs_macr_sva_sig[["deseq"]][["ups"]][["macro_chr-sh"]]
+lfs_down <- hs_macr_sva_sig[["deseq"]][["downs"]][["macro_chr-sh"]]
+
+up_gp <- simple_gprofiler(sig_genes=lfs_up, species="hsapiens")
+up_gp[["pvalue_plots"]][["bpp_plot_over"]]
+down_gp <- simple_gprofiler(sig_genes=lfs_down, species="hsapiens")
+down_gp[["pvalue_plots"]][["bpp_plot_over"]]
+
+up_goseq <- simple_goseq(sig_genes=lfs_up, go_db=hs_go[["go"]], length_db=hs_lengths)
+up_goseq[["pvalue_plots"]][["bpp_plot_over"]]
+down_goseq <- simple_goseq(sig_genes=lfs_down, go_db=hs_go[["go"]], length_db=hs_lengths)
+down_goseq[["pvalue_plots"]][["bpp_plot_over"]]
+
+up_topgo <- simple_topgo(sig_genes=lfs_up, go_db=hs_go[["go"]])
+up_topgo[["pvalue_plots"]][["bpp_plot_over"]]
+down_topgo <- simple_topgo(sig_genes=lfs_down, go_db=hs_go[["go"]])
+down_topgo[["pvalue_plots"]][["bpp_plot_over"]]
+
+up_cp <- simple_clusterprofiler(sig_genes=lfs_up, do_david=FALSE, do_gsea=FALSE, orgdb="org.Hs.eg.db", fc_column="deseq_logfc")
+up_cp[["pvalue_plots"]][["ego_all_bp"]]
+up_cp[["plots"]][["dot_all_bp"]]
+down_cp <- simple_clusterprofiler(sig_genes=lfs_down, do_david=FALSE, do_gsea=FALSE, orgdb="org.Hs.eg.db", fc_column="deseq_logfc")
+down_cp[["pvalue_plots"]][["ego_all_bp"]]
+down_cp[["plots"]][["dot_all_bp"]]
+```
+
+
+```{r saveme}
+pander::pander(sessionInfo())
+message(paste0("This is hpgltools commit: ", get_git_commit()))
+this_save <- paste0(gsub(pattern="\\.Rmd", replace="", x=rmd_file), "-v", ver, ".rda.xz")
+message(paste0("Saving to ", this_save))
+tmp <- sm(saveme(filename=this_save))
+```
