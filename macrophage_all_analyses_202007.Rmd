@@ -85,7 +85,7 @@ rmd_file <- "macrophage_all_analyses_202007.Rmd"
 There are a few methods of importing annotation data into R.  The following are
 two attempts, the second is currently being used in these analyses.
 
-```{r make_orgdb}
+```{r make_orgdb, eval=FALSE}
 meta <- EuPathDB::download_eupath_metadata(webservice="tritrypdb")
 
 lm_entry <- EuPathDB::get_eupath_entry(species="Leishmania major", metadata=meta)
@@ -107,7 +107,7 @@ testing_crith <- EuPathDB::make_eupath_orgdb(entry=crit_entry)
 Assuming the above packages got created, we may load them and extract the
 annotation data.
 
-```{r lpanamensis_orgdb}
+```{r lpanamensis_orgdb, eval=FALSE}
 wanted_fields <- c("annot_cds_length", "annot_chromosome", "annot_gene_entrez_id",
                    "annot_gene_name", "annot_strand", "gid", "go_go_id",
                    "go_go_term_name", "go_ontology",
@@ -129,9 +129,9 @@ transcriptome may be extracted from biomart.
 
 ```{r genome_input}
 ## The old way of getting genome/annotation data
-lp_gff <- "reference/lpanamensis.gff"
-lb_gff <- "reference/lbraziliensis.gff"
-hs_gff <- "reference/hsapiens.gtf"
+lp_gff <- "reference/lpanamensis.gff.xz"
+lb_gff <- "reference/lbraziliensis.gff.xz"
+hs_gff <- "reference/hsapiens.gtf.xz"
 
 lp_fasta <- "reference/lpanamensis.fasta.xz"
 lb_fasta <- "reference/lbraziliensis.fasta.xz"
@@ -217,24 +217,16 @@ hs_go <- sm(load_biomart_go())
 ## or the org.Hs.eg.db sqlite database
 tt <- sm(library("Homo.sapiens"))
 hs <- Homo.sapiens
-##hs_go_ensembl <- load_orgdb_go(hs, hs_annotations$geneID)
-##dim(hs_go_biomart)
-##dim(hs_go_ensembl)
-##hs_goids <- hs_go_biomart
 
-## While testing, I called this desc, that will need to change.
-##lp_tooltips <- make_tooltips(lp_annotations)
-##lb_tooltips <- make_tooltips(lb_annotations)
-
-lp_lengths <- lp_annotations[, c("ID", "width")]
-lb_lengths <- lb_annotations[, c("ID", "width")]
+## lp_lengths <- lp_annotations[, c("ID", "width")]
+## lb_lengths <- lb_annotations[, c("ID", "width")]
 hs_lengths <- hs_annotations[, c("ensembl_gene_id", "cds_length")]
 colnames(hs_lengths) <- c("ID", "width")
 
-lp_goids <- read.csv(file="reference/lpan_go.txt.xz", sep="\t", header=FALSE)
-lb_goids <- read.csv(file="reference/lbraz_go.txt.xz", sep="\t", header=FALSE)
-colnames(lp_goids) <- c("ID","GO","ont","name","source","tag")
-colnames(lb_goids) <- c("ID","GO","ont","name","source","tag")
+## lp_goids <- read.csv(file="reference/lpan_go.txt.xz", sep="\t", header=FALSE)
+## lb_goids <- read.csv(file="reference/lbraz_go.txt.xz", sep="\t", header=FALSE)
+## colnames(lp_goids) <- c("ID","GO","ont","name","source","tag")
+## colnames(lb_goids) <- c("ID","GO","ont","name","source","tag")
 ```
 
 # Putting the pieces together
@@ -273,7 +265,7 @@ undef_idx <- hs_annotations == "undefined"
 hs_annotations[undef_idx] <- FALSE
 fData(hs_macr[["expressionset"]]) <- hs_annotations
 
-knitr::kable(head(hs_macr$design, n=1))
+knitr::kable(head(hs_macr$design))
 
 ##cds_entries <- fData(hs_macr)
 ##cds_entries <- cds_entries[["gene_biotype"]] == "protein_coding"
@@ -286,6 +278,11 @@ hs_cds_macr <- exclude_genes_expt(hs_macr, method="keep",
 ```
 
 ## The parasite transcriptome mappings
+
+We also mapped the data against Leishmania panamensis for the infected
+samples (actually all of them, it was nice to see that very near 0 reads
+of the uninfected samples mapped).  Though the paper does not address
+this data, it is quite fascinating.
 
 ```{r parasite_expt}
 lp_macr <- sm(create_expt(
@@ -350,43 +347,44 @@ the data looks depending on batch methodology.
 ```{r batch_methods}
 start <- sm(normalize_expt(hs_cds_macr, filter=TRUE, convert="cpm",
                            norm="quant", transform="log2"))
-pp(file="cpm_quant_filter_pca.png", image=plot_pca(start)$plot)
+pp(file="images/cpm_quant_filter_pca.png", image=plot_pca(start)$plot)
 
 limma_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
                                  convert="cpm", norm="quant",
                                  transform="log2", batch="limma"))
-pp(file="lcqf_limma.png", image=plot_pca(limma_batch)$plot)
+pp(file="images/lcqf_limma.png", image=plot_pca(limma_batch)$plot)
 
 pca_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
                                convert="cpm", norm="quant",
                                transform="log2", batch="pca"))
-pp(file="lcqf_pca.png", image=plot_pca(pca_batch)$plot)
+pp(file="images/lcqf_pca.png", image=plot_pca(pca_batch)$plot)
 
 svaseq_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
                                   convert="cpm",
                                   transform="log2", batch="svaseq"))
-pp(file="lcqf_svaseq.png", image=plot_pca(svaseq_batch)$plot)
+pp(file="images/lcqf_svaseq.png", image=plot_pca(svaseq_batch)$plot)
 
 sva_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
                                convert="cpm",
                                transform="log2", batch="fsva"))
-pp(file="lcqf_sva.png", image=plot_pca(sva_batch)$plot)
+pp(file="images/lcqf_sva.png", image=plot_pca(sva_batch)$plot)
 
 combat_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
                                   convert="cpm",
                                   transform="log2", batch="combat"))
-pp(file="lcqf_combat.png", image=plot_pca(combat_batch)$plot)
+pp(file="images/lcqf_combat.png", image=plot_pca(combat_batch)$plot)
 
 combatnp_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
                                     convert="cpm",
                                     transform="log2", batch="combat_noprior"))
-pp(file="lcqf_combatnp.png", image=plot_pca(combatnp_batch)$plot)
+pp(file="images/lcqf_combatnp.png", image=plot_pca(combatnp_batch)$plot)
 ```
 
-# Figure S1
+# Figure S2
 
-Figure S1 should include nice versions of the sample metrics.
-The normalization chosen is batch-in-model.
+This used to be S1...  Figure S2 should include nice versions of the
+sample metrics.  The normalization chosen is batch-in-model.  Also the
+normalized PCA got moved to Figure 4.
 
 First, however, we will make some plots of the raw data.
 
@@ -403,10 +401,19 @@ fig_s1 <- sm(write_expt(
     transform="log2", batch="svaseq", filter=TRUE,
     excel=paste0("excel/figure_s1_sample_estimation-v", ver, ".xlsx")))
 
-pp(file="fig_s1a_libsizes.tif", image=fig_s1$raw_libsize)
-pp(file="fig_s1b_heatmap.tif", image=fig_s1$norm_disheat)
-pp(file="fig_s1c_raw_pca.tif", image=fig_s1$raw_scaled_pca)
-pp(file="fig_1a_norm_pca.tif", image=fig_s1$norm_pca)
+pp(file="figures/fig_s2a_libsizes.tif", image=fig_s1$raw_libsize)
+pp(file="figures/fig_s2b_heatmap.tif", image=fig_s1$norm_disheat)
+
+hs_cdsn <- normalize_expt(hs_cds_macr, filter=TRUE, norm="quant",
+                          convert="cpm", transform="log2")
+pp(file="figures/fig_2sc_raw_pca.tif",
+   image=plot_pca(hs_cdsn, plot_labels=FALSE)$plot)
+hs_cdsnb <- normalize_expt(hs_cds_macr, filter=TRUE, batch="svaseq",
+                           convert="cpm", transform="log2")
+pp(file="figures/fig_4a_norm_pca.tif",
+   image=plot_pca(hs_cdsnb, plot_labels=FALSE)$plot)
+##pp(file="figures/fig_s2c_raw_pca.tif", image=fig_s1$raw_scaled_pca)
+##pp(file="figures/fig_4a_norm_pca.tif", image=fig_s1$norm_pca)
 ```
 
 # Differential Expression, Macrophage: `r ver`
@@ -416,7 +423,7 @@ pp(file="fig_1a_norm_pca.tif", image=fig_s1$norm_pca)
 The most likely batch method from the above is svaseq.  Let us perform
 differential expression analyses with it along with a few other methods.
 
-```{r setup_de_norm, fig.show="hide"}
+```{r setup_de_norm}
 hs_contrasts <- list(
     "macro_chr-sh" = c("chr","sh"),
     "macro_chr-nil" = c("chr","uninf"),
@@ -573,7 +580,6 @@ sva_combat$logfc
 ## Two likely volcano plots
 
 # TODO 202007
-
 1.  Change volcano plots to logFC 0.58.
 2.  Send figure S1 new versions with improved labels.
 
@@ -586,7 +592,7 @@ batchmodel_volcano <- plot_volcano_de(
     logfc=0.58,
     shapes_by_state=FALSE,
     line_position="top")
-batchmodel_volcano$plot
+pp(file="figures/fig_4b_volcano.tif", image=batchmodel_volcano$plot)
 
 svamodel_volcano <- plot_volcano_de(
     table=hs_macr_sva_tables[["data"]][["macro_chr-sh"]],
@@ -596,7 +602,7 @@ svamodel_volcano <- plot_volcano_de(
     logfc=0.58,
     shapes_by_state=FALSE,
     line_position="top")
-pp(file="sva_chsh_deseq_volcano.tif", image=svamodel_volcano$plot)
+svamodel_volcano$plot
 ```
 
 ## PROPER

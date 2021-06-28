@@ -85,6 +85,9 @@ rmd_file <- "pbmc_all_analyses_202102.Rmd"
 There are a few methods of importing annotation data into R.  The following are
 two attempts, the second is currently being used in these analyses.
 
+Oh yeah, unlike the macrophage analysis sheet, in this one I actually
+specified the tritrypdb version, so it should actually be consistent.
+
 ```{r make_orgdb_meta}
 meta <- EuPathDB::download_eupath_metadata(webservice="tritrypdb", eu_version=46)
 
@@ -122,7 +125,7 @@ lp_org <- sm(EuPathDB::load_eupath_annotations(query=lp_entry, eu_version=46))
 lb_org <- sm(EuPathDB::load_eupath_annotations(query=lb_entry, eu_version=46))
 ld_org <- sm(EuPathDB::load_eupath_annotations(query=ld_entry, eu_version=46))
 lmex_org <- sm(EuPathDB::load_eupath_annotations(query=lmex_entry, eu_version=46))
-cf_ort <- sm(EuPathDB::load_eupath_annotations(query=crit_entry, eu_version=46))
+##cf_ort <- sm(EuPathDB::load_eupath_annotations(query=crit_entry, eu_version=46))
 ```
 
 ## Read a gff file
@@ -133,9 +136,9 @@ transcriptome may be extracted from biomart.
 
 ```{r genome_input}
 ## The old way of getting genome/annotation data
-lp_gff <- "reference/lpanamensis.gff"
-lb_gff <- "reference/lbraziliensis.gff"
-hs_gff <- "reference/hsapiens.gtf"
+lp_gff <- "reference/lpanamensis.gff.xz"
+lb_gff <- "reference/lbraziliensis.gff.xz"
+hs_gff <- "reference/hsapiens.gtf.xz"
 
 lp_fasta <- "reference/lpanamensis.fasta.xz"
 lb_fasta <- "reference/lbraziliensis.fasta.xz"
@@ -186,10 +189,10 @@ lb_lengths <- lb_annotations[, c("ID", "width")]
 hs_lengths <- hs_annotations[, c("ensembl_gene_id", "cds_length")]
 colnames(hs_lengths) <- c("ID", "width")
 
-lp_goids <- read.csv(file="reference/lpan_go.txt.xz", sep="\t", header=FALSE)
-lb_goids <- read.csv(file="reference/lbraz_go.txt.xz", sep="\t", header=FALSE)
-colnames(lp_goids) <- c("ID","GO","ont","name","source","tag")
-colnames(lb_goids) <- c("ID","GO","ont","name","source","tag")
+## lp_goids <- read.csv(file="reference/lpan_go.txt.xz", sep="\t", header=FALSE)
+## lb_goids <- read.csv(file="reference/lbraz_go.txt.xz", sep="\t", header=FALSE)
+## colnames(lp_goids) <- c("ID","GO","ont","name","source","tag")
+## colnames(lb_goids) <- c("ID","GO","ont","name","source","tag")
 ```
 
 # Putting the pieces together
@@ -283,8 +286,8 @@ hs_inf_write <- write_expt(
 ## Step 1, all samples (cds only) including uninfected samples.
 pbmc_norm <- normalize_expt(hs_cds_pbmc, transform="log2", convert="cpm",
                             norm="quant", filter=TRUE)
-plt <- plot_pca(pbmc_norm)$plot
-pp(file=glue::glue("images/pbmc_step1-v{ver}.pdf"), image=plt)
+plt <- plot_pca(pbmc_norm, plot_labels=FALSE)$plot
+pp(file="figures/fig_2a.tiff", image=plt)
 plt
 
 ## Step 1a.
@@ -298,18 +301,16 @@ plt
 ## Step 2, drop the uninfected samples and repeat.
 hs_minus <- subset_expt(hs_cds_pbmc, subset="condition!='uninf'")
 ## minus_norm <- normalize_expt(hs_minus, transform="log2", convert="cpm", norm="quant", filter=TRUE)
-minus_norm <- normalize_expt(hs_minus, convert="cpm", norm="quant", filter=TRUE)
-minus_norm <- normalize_expt(minus_norm, transform="log2")
-plt <- plot_pca(minus_norm)$plot
-pp(file=glue::glue("images/pbmc_step2-v{ver}.pdf"), image=plt)
+minus_norm <- normalize_expt(hs_minus, convert="cpm", norm="quant", filter=TRUE, transform="log2")
+plt <- plot_pca(minus_norm, plot_labels=FALSE)$plot
+pp(file="figures/fig_2b.tif", image=plt)
 plt
 
 ## Step 2a
 ##minus_nb <- normalize_expt(hs_minus, transform="log2", convert="cpm", filter=TRUE, batch="svaseq")
-minus_nb <- normalize_expt(hs_minus, convert="cpm", filter=TRUE, batch="svaseq")
-minus_nb <- normalize_expt(minus_nb, transform="log2")
-plt <- plot_pca(minus_nb)$plot
-pp(file=glue::glue("images/pbmc_step2a-v{ver}.pdf"), image=plt)
+minus_nb <- normalize_expt(hs_minus, convert="cpm", filter=TRUE, batch="svaseq", transform="log2")
+plt <- plot_pca(minus_nb, plot_labels=FALSE)$plot
+pp(file="figures/fig_2c.tiff", image=plt)
 plt
 
 ## Step 3, drop the problematic samples and repeat.
@@ -398,11 +399,11 @@ similarities <- compare_de_results(pbmc_tables, minus_tables)
 
 ```{r s1_figures}
 pbmc_s1_libsize <- plot_libsize(hs_cds_pbmc)
-pp(file="pictures/pbmc_s1_libsize.pdf", image=pbmc_s1_libsize$plot)
+pp(file="images/pbmc_s1_libsize.pdf", image=pbmc_s1_libsize$plot)
 
 pbmc_heat_norm <- normalize_expt(hs_cds_pbmc, filter=TRUE, batch="svaseq", transform="log2")
 pbmc_s1_heat <- plot_disheat(pbmc_heat_norm)
-pp(file="pictures/pbmc_s1_disheat.pdf", image=pbmc_s1_heat)
+pp(file="images/pbmc_s1_disheat.pdf", image=pbmc_s1_heat)
 ```
 
 ## Try out upsetr with the following for the pbmc data
@@ -442,6 +443,7 @@ unique_sh_down_idx <- start[["down_sh_vs_nil"]] == 1 & rowSums(start) == 1
 unique_sh_down <- start[unique_sh_down_idx, ]
 
 test_up <- simple_gprofiler(sig_genes=rownames(unique_sh_up), species="hsapiens")
+test_up$pvalue_plots$bpp_plot_over
 test_down <- simple_gprofiler(sig_genes=rownames(unique_sh_down), species="hsapiens")
 ```
 
@@ -460,7 +462,7 @@ Thus, in the following picture we see:
 library(UpSetR)
 plt <- upset(start)
 plt <- grDevices::recordPlot()
-pp(file="pictures/upset.pdf", image=plt)
+pp(file="images/upset.pdf", image=plt)
 ```
 
 # Deconvolution/GSVA analyses with these samples
@@ -469,15 +471,15 @@ Let us grab the C7 immunology signatures from msigdb, there are a few ways to do
 One is to parse the xml files and another to parse the gmt files.
 
 ```{r msig_immunology}
-broad_c7 <- GSEABase::getGmt("reference/msigdb_v7.2/c7.all.v7.2.entrez.gmt",
+broad_c7 <- GSEABase::getGmt("reference/msigdb_v7.2/c7.all.v7.2.entrez.gmt.xz",
                              collectionType=GSEABase::BroadCollection(category="c7"),
                              geneIdType=GSEABase::EntrezIdentifier())
 
-broad_c8 <- GSEABase::getGmt("reference/msigdb_v7.2/c8.all.v7.2.entrez.gmt",
+broad_c8 <- GSEABase::getGmt("reference/msigdb_v7.2/c8.all.v7.2.entrez.gmt.xz",
                              collectionType=GSEABase::BroadCollection(category="c8"),
                              geneIdType=GSEABase::EntrezIdentifier())
 
-broad_c2 <- GSEABase::getGmt("reference/msigdb_v7.2/c2.all.v7.2.entrez.gmt",
+broad_c2 <- GSEABase::getGmt("reference/msigdb_v7.2/c2.all.v7.2.entrez.gmt.xz",
                              collectionType=GSEABase::BroadCollection(category="c2"),
                              geneIdType=GSEABase::EntrezIdentifier())
 ```
@@ -489,7 +491,7 @@ hs_cds_gsva_input <- normalize_expt(hs_cds_pbmc_new, filter=TRUE, batch="svaseq"
 hs_cds_gsva_input <- normalize_expt(hs_cds_gsva_input, convert="rpkm", column="cds_length")
 pbmc_gsva <- simple_gsva(hs_cds_gsva_input)
 gsva_expt <- pbmc_gsva[["expt"]]
-pbmc_scored <- gsva_likelihoods(pbmc_gsva, factor="chr")
+pbmc_scored <- get_sig_gsva_categories(pbmc_gsva, factor="chr")
 
 reactome_subset <- grepl(x=rownames(gsva_expt$expressionset), pattern="^REACTOME")
 reactome_gsva <- gsva_expt$expressionset[reactome_subset, ]
@@ -507,7 +509,7 @@ A couple of TODOs from our meeting 20210224
 2.  Perform the gsva limma of infected vs. uninfected.
 3.  Incorporate Theresa's improvements
 
-```{r todo_testing}
+```{r todo_testing, eval=FALSE}
 testing <- simple_gsva(hs_cds_gsva_input, signatures = broad_c7,
                        msig_xml = "reference/msigdb_v7.2.xml", cores = 10)
 ```
@@ -665,397 +667,6 @@ donor_minus_tables <- combine_de_tables(donor_minus_de,
                                         excel="excel/minus_donor_tables.xlsx")
 ```
 
-# Figure 4
-
-Construct figure 4, this should include the following panels:
-
-  a.  Library sizes of pbmc data
-  b.  PCA of log2(quant(data)), with uninfected
-  c.  PCA of log2(quant(data)), without uninfected
-  d.  TSNE of b
-  e.  TSNE of c
-
-```{r figure_04}
-pp(file=glue::glue("images/figure_4a-v{ver}.pdf"))
-hs_inf_write$raw_libsize
-dev.off()
-pp(file=glue::glue("images/figure_4b-v{ver}.pdf"))
-hs_inf_write$raw_scaled_pca
-dev.off()
-pp(file=glue::glue("images/figure_4c-v{ver}.pdf"))
-hs_inf_write$norm_pca
-dev.off()
-```
-
-```{r de}
-keepers <- list("sh_nil" = c("sh", "uninf"),
-                "ch_nil" = c("chr", "uninf"),
-                "ch_sh" = c("chr", "sh"))
-hs_pairwise_nobatch <- sm(all_pairwise(hs_cds_inf,
-                                       model_batch=FALSE))
-hs_pairwise_batch <- sm(all_pairwise(hs_cds_inf, model_batch=TRUE))
-hs_pairwise_sva <- sm(all_pairwise(hs_cds_inf, model_batch="svaseq", filter=TRUE))
-hs_nobatch_tables <- combine_de_tables(
-    hs_pairwise_nobatch,
-    keepers=keepers,
-    excel=glue::glue("excel/hs_infect_nobatch-v{ver}.xlsx"))
-hs_batch_tables <- combine_de_tables(
-    hs_pairwise_batch,
-    keepers=keepers,
-    excel=glue::glue("excel/hs_infect_batch-v{ver}.xlsx"))
-hs_sva_tables <- combine_de_tables(
-    hs_pairwise_sva,
-    keepers=keepers,
-    excel=glue::glue("excel/hs_infect_sva-v{ver}.xlsx"))
-```
-
-## Extract the macrophage experiment
-
-The following subset operation extract the samples used for the macrophage experiment. The next
-three lines then change the colors from the defaults.
-
-```{r macrophages}
-new_colors <- c("#009900", "#990000", "#000099")
-names(new_colors) <- c("uninf", "chr", "sh")
-
-hs_macr <- subset_expt(hs_all, subset = "")
-hs_macr <- set_expt_colors(hs_macr, colors=new_colors)
-labels <- as.character(pData(hs_macr)[["label"]])
-hs_macr <- set_expt_samplenames(hs_macr, labels)
-
-hs_cds_macr <- set_expt_colors(hs_cds_macr, colors=new_colors)
-hs_cds_macr <- set_expt_samplenames(hs_cds_macr, labels)
-```
-
-# Compare methods
-
-In our meeting this morning (20190708), Najib and Maria Adelaida asked for how
-the data looks depending on batch methodology.
-
-```{r batch_methods}
-start <- sm(normalize_expt(hs_cds_macr, filter=TRUE, convert="cpm",
-                           norm="quant", transform="log2"))
-pp(file="cpm_quant_filter_pca.png", image=plot_pca(start)$plot)
-
-limma_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
-                                 convert="cpm", norm="quant",
-                                 transform="log2", batch="limma"))
-pp(file="lcqf_limma.png", image=plot_pca(limma_batch)$plot)
-
-pca_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
-                               convert="cpm", norm="quant",
-                               transform="log2", batch="pca"))
-pp(file="lcqf_pca.png", image=plot_pca(pca_batch)$plot)
-
-svaseq_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
-
-                                  convert="cpm",
-                                  transform="log2", batch="svaseq"))
-pp(file="lcqf_svaseq.png", image=plot_pca(svaseq_batch)$plot)
-
-sva_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
-                               convert="cpm",
-                               transform="log2", batch="fsva"))
-pp(file="lcqf_sva.png", image=plot_pca(sva_batch)$plot)
-
-combat_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
-                                  convert="cpm",
-                                  transform="log2", batch="combat"))
-pp(file="lcqf_combat.png", image=plot_pca(combat_batch)$plot)
-
-combatnp_batch <- sm(normalize_expt(hs_cds_macr, filter=TRUE,
-                                    convert="cpm",
-                                    transform="log2", batch="combat_noprior"))
-pp(file="lcqf_combatnp.png", image=plot_pca(combatnp_batch)$plot)
-```
-
-# Figure S1
-
-Figure S1 should include nice versions of the sample metrics.
-The normalization chosen is batch-in-model.
-
-First, however, we will make some plots of the raw data.
-
-Sample names are going to be 'infectionstate_strainnumber' : chr_7721
-
-* Panel A: Library sizes.
-* Panel B: Heatmap distance raw.
-* Panel C: PCA
-* Panel D: TSNE
-
-```{r fig_s1_write, fig.show="hide"}
-fig_s1 <- sm(write_expt(
-    hs_cds_macr, norm="raw", violin=FALSE, convert="cpm",
-    transform="log2", batch="svaseq", filter=TRUE,
-    excel=paste0("excel/figure_s1_sample_estimation-v", ver, ".xlsx")))
-
-pp(file="fig_s1a_libsizes.tif", image=fig_s1$raw_libsize)
-pp(file="fig_s1b_heatmap.tif", image=fig_s1$norm_disheat)
-pp(file="fig_s1c_raw_pca.tif", image=fig_s1$raw_scaled_pca)
-pp(file="fig_1a_norm_pca.tif", image=fig_s1$norm_pca)
-```
-
-# Differential Expression, Macrophage: `r ver`
-
-# Differential expression analyses
-
-The most likely batch method from the above is svaseq.  Let us perform
-differential expression analyses with it along with a few other methods.
-
-```{r setup_de_norm, fig.show="hide"}
-hs_contrasts <- list(
-    "macro_chr-sh" = c("chr","sh"),
-    "macro_chr-nil" = c("chr","uninf"),
-    "macro_sh-nil" = c("sh", "uninf"))
-## Set up the data used in the comparative contrast sets.
-```
-
-## No batch in the model
-
-### Set up no batch
-
-Print a reminder of what we can expect when doing this with no batch information.
-
-```{r nobatch_setup}
-hs_macr_lowfilt <- sm(normalize_expt(hs_cds_macr, filter=TRUE))
-hs_lowfilt_pca <- sm(plot_pca(hs_cds_macr, transform="log2"))
-hs_lowfilt_pca$plot
-```
-
-```{r macro_nobatch1, fig.show="hide"}
-hs_macr_nobatch <- all_pairwise(input=hs_cds_macr, model_batch=FALSE,
-                                limma_method="robust")
-## wow, all tools including basic agree almost completely
-medians_by_condition <- hs_macr_nobatch$basic$medians
-excel_file <- glue::glue("excel/{rundate}_hs_macr_nobatch_contr-v{ver}.xlsx")
-hs_macr_nobatch_tables <- sm(combine_de_tables(hs_macr_nobatch,
-                                               excel=excel_file,
-                                               keepers=hs_contrasts,
-                                               extra_annot=medians_by_condition))
-excel_file <- glue::glue("excel/{rundate}_hs_macr_nobatch_sig-v{ver}.xlsx")
-hs_macr_nobatch_sig <- sm(extract_significant_genes(hs_macr_nobatch_tables, lfc=0.585,
-                                                    excel=excel_file,
-                                                    according_to="all"))
-```
-
-## Batch in the model
-
-### Batch setup
-
-```{r batch_setup}
-hs_lowfilt_batch_pca <- sm(plot_pca(hs_cds_macr, transform="log2",
-                                    convert="cpm", batch="limma", filter=TRUE))
-hs_lowfilt_batch_pca$plot
-```
-
-In this  attempt, we add a batch factor in the experimental model and see how it does.
-
-```{r macro_batch1, fig.show="hide"}
-## Here just let all_pairwise run on filtered data and do its normal ~ 0 + condition + batch analyses
-hs_macr_batch <- all_pairwise(input=hs_cds_macr, batch=TRUE, limma_method="robust")
-medians_by_condition <- hs_macr_batch$basic$medians
-excel_file <- glue::glue("excel/{rundate}_hs_macr_batchmodel_contr-v{ver}.xlsx")
-hs_macr_batch_tables <- combine_de_tables(
-    hs_macr_batch,
-    keepers=hs_contrasts,
-    extra_annot=medians_by_condition,
-    excel=excel_file)
-excel_file <- glue::glue("excel/{rundate}_hs_macr_batchmodel_sig-v{ver}.xlsx")
-hs_macr_batch_sig <- extract_significant_genes(
-    hs_macr_batch_tables, excel=excel_file,  lfc=0.585,
-    according_to="deseq")
-excel_file <- glue::glue("excel/{rundate}_hs_macr_batchmodel_abund-v{ver}.xlsx")
-hs_macr_batch_abun <- sm(extract_abundant_genes(
-    hs_macr_batch_tables, excel=excel_file,
-    according_to="deseq"))
-```
-
-## SVA
-
-### sva setup
-
-```{r sva_setup}
-hs_lowfilt_sva_pca <- sm(plot_pca(hs_cds_macr, transform="log2",
-                                  convert="cpm", batch="svaseq", filter=TRUE))
-hs_lowfilt_sva_pca$plot
-```
-
-In this  attempt, we tell all pairwise to invoke svaseq.
-
-```{r macro_sva, fig.show="hide"}
-hs_macr_sva <- all_pairwise(input=hs_cds_macr, model_batch="svaseq", filter=TRUE, limma_method="robust")
-medians_by_condition <- hs_macr_sva$basic$medians
-excel_file <- glue::glue("excel/{rundate}_hs_macr_svamodel_contr-v{ver}.xlsx")
-hs_macr_sva_tables <- combine_de_tables(
-  hs_macr_sva,
-  keepers=hs_contrasts,
-  extra_annot=medians_by_condition,
-  excel=excel_file)
-excel_file <- glue::glue("excel/{rundate}_hs_macr_svamodel_sig-v{ver}.xlsx")
-hs_macr_sva_sig <- extract_significant_genes(
-    hs_macr_sva_tables, excel=excel_file,
-    according_to="deseq")
-excel_file <- glue::glue("excel/{rundate}_hs_macr_svamodel_abund-v{ver}.xlsx")
-hs_macr_sva_abun <- sm(extract_abundant_genes(
-    hs_macr_sva_tables, excel=excel_file,
-    according_to="deseq"))
-```
-
-## Combat
-
-As you know, combat actually changes the data, so it will require a slightly
-different setup.
-
-### combat setup
-
-```{r combat_setup}
-combatnp_input <- normalize_expt(hs_cds_macr, filter=TRUE,
-                                 convert="cpm",
-                                 batch="combat_noprior")
-```
-
-In this  attempt, we tell all pairwise to invoke svaseq.
-
-```{r macro_combat, fig.show="hide"}
-hs_macr_combat <- all_pairwise(input=combatnp_input, model_batch=FALSE,
-                               force=TRUE, limma_method="robust")
-excel_file <- glue::glue("excel/{rundate}_hs_macr_combat_contr-v{ver}.xlsx")
-hs_macr_combat_tables <- combine_de_tables(
-    hs_macr_combat,
-    keepers=hs_contrasts,
-    extra_annot=medians_by_condition,
-    excel=excel_file)
-excel_file <- glue::glue("excel/{rundate}_hs_macr_combat_sig-v{ver}.xlsx")
-hs_macr_combat_sig <- extract_significant_genes(
-  hs_macr_combat_tables, excel=excel_file,
-  according_to="deseq")
-excel_file <- glue::glue("excel/{rundate}_hs_macr_combat_abund-v{ver}.xlsx")
-hs_macr_combat_abun <- sm(extract_abundant_genes(
-  hs_macr_combat_tables, excel=excel_file,
-  according_to="deseq"))
-```
-
-## Compare these three results
-
-```{r compare_de_results}
-nobatch_batch <- compare_de_results(first=hs_macr_nobatch_tables,
-                                    second=hs_macr_batch_tables)
-nobatch_batch$logfc
-
-batch_sva <- compare_de_results(first=hs_macr_batch_tables,
-                                second=hs_macr_sva_tables)
-batch_sva$logfc
-
-batch_combat <- compare_de_results(first=hs_macr_batch_tables,
-                                   second=hs_macr_combat_tables)
-batch_combat$logfc
-
-sva_combat <- compare_de_results(first=hs_macr_sva_tables,
-                                 second=hs_macr_combat_tables)
-sva_combat$logfc
-## Interesting how much sva and combat disagree.
-```
-
-## Two likely volcano plots
-
-# TODO 202007
-
-1.  Change volcano plots to logFC 0.58.
-2.  Send figure S1 new versions with improved labels.
-
-```{r table_s2}
-batchmodel_volcano <- plot_volcano_de(
-    table=hs_macr_batch_tables[["data"]][["macro_chr-sh"]],
-    color_by="state",
-    fc_col="deseq_logfc",
-    p_col="deseq_adjp",
-    logfc=0.58,
-    shapes_by_state=FALSE,
-    line_position="top")
-batchmodel_volcano$plot
-
-svamodel_volcano <- plot_volcano_de(
-    table=hs_macr_sva_tables[["data"]][["macro_chr-sh"]],
-    color_by="state",
-    fc_col="deseq_logfc",
-    p_col="deseq_adjp",
-    logfc=0.58,
-    shapes_by_state=FALSE,
-    line_position="top")
-pp(file="sva_chsh_deseq_volcano.tif", image=svamodel_volcano$plot)
-```
-
-## PROPER
-
-```{r proper}
-hs_proper <- simple_proper(de_tables=hs_macr_batch_tables)
-```
-
-## Ontology searching against the sva results.
-
-Recall that I made the variables 'hs_macr_sva_sig' and 'hs_macr_sva_abun' to
-hold the results of the most significantly changed and abundant genes.
-
-gProfiler is my favorite tool for ontology searching, however they recently had
-a big update and split their code.  The new version has all sorts of cool toys,
-but as of the last time I tried it, did not work.  Thus the following is still
-using the older methods.
-
-```{r ontology2}
-lfs_up <- hs_macr_sva_sig[["deseq"]][["ups"]][["macro_chr-sh"]]
-lfs_down <- hs_macr_sva_sig[["deseq"]][["downs"]][["macro_chr-sh"]]
-
-up_gp <- simple_gprofiler(sig_genes=lfs_up, species="hsapiens")
-up_gp[["pvalue_plots"]][["bpp_plot_over"]]
-down_gp <- simple_gprofiler(sig_genes=lfs_down, species="hsapiens")
-down_gp[["pvalue_plots"]][["bpp_plot_over"]]
-
-up_goseq <- simple_goseq(sig_genes=lfs_up, go_db=hs_go[["go"]], length_db=hs_lengths)
-up_goseq[["pvalue_plots"]][["bpp_plot_over"]]
-down_goseq <- simple_goseq(sig_genes=lfs_down, go_db=hs_go[["go"]], length_db=hs_lengths)
-down_goseq[["pvalue_plots"]][["bpp_plot_over"]]
-
-up_topgo <- simple_topgo(sig_genes=lfs_up, go_db=hs_go[["go"]])
-up_topgo[["pvalue_plots"]][["bpp_plot_over"]]
-down_topgo <- simple_topgo(sig_genes=lfs_down, go_db=hs_go[["go"]])
-down_topgo[["pvalue_plots"]][["bpp_plot_over"]]
-
-up_cp <- simple_clusterprofiler(sig_genes=lfs_up, do_david=FALSE, do_gsea=FALSE, orgdb="org.Hs.eg.db", fc_column="deseq_logfc")
-up_cp[["pvalue_plots"]][["ego_all_bp"]]
-up_cp[["plots"]][["dot_all_bp"]]
-down_cp <- simple_clusterprofiler(sig_genes=lfs_down, do_david=FALSE, do_gsea=FALSE, orgdb="org.Hs.eg.db", fc_column="deseq_logfc")
-down_cp[["pvalue_plots"]][["ego_all_bp"]]
-down_cp[["plots"]][["dot_all_bp"]]
-```
-
-# Separate the three donors
-
-```{r separate_donors}
-all_de <- all_pairwise(hs_cds_all, model_batch="svaseq", filter=TRUE)
-
-d108 <- subset_expt(hs_cds_all, subset="donor=='d108'")
-d107 <- subset_expt(hs_cds_all, subset="donor=='d107'")
-d110 <- subset_expt(hs_cds_all, subset="donor=='d110'")
-
-d108_de <- all_pairwise(d108, model_batch="svaseq", filter=TRUE)
-d107_de <- all_pairwise(d107, model_batch="svaseq", filter=TRUE)
-d110_de <- all_pairwise(d110, model_batch="svaseq", filter=TRUE)
-
-d108_table <- combine_de_tables(d108_de, excel="excel/d108_tables.xlsx")
-d107_table <- combine_de_tables(d107_de, excel="excel/d107_tables.xlsx")
-d110_table <- combine_de_tables(d110_de, excel="excel/d110_tables.xlsx")
-
-
-d108 <- subset_expt(hs_cds_inf, subset="donor=='d108'")
-d107 <- subset_expt(hs_cds_inf, subset="donor=='d107'")
-d110 <- subset_expt(hs_cds_inf, subset="donor=='d110'")
-d108_de <- all_pairwise(d108, model_batch="svaseq", filter=TRUE)
-d107_de <- all_pairwise(d107, model_batch="svaseq", filter=TRUE)
-d110_de <- all_pairwise(d110, model_batch="svaseq", filter=TRUE)
-d108_table <- combine_de_tables(d108_de, excel="excel/d108_minustwo_tables.xlsx")
-d107_table <- combine_de_tables(d107_de, excel="excel/d107_minustwo_tables.xlsx")
-d110_table <- combine_de_tables(d110_de, excel="excel/d110_minustwo_tables.xlsx")
-```
 
 ```{r saveme}
 pander::pander(sessionInfo())
