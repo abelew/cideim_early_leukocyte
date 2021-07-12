@@ -225,30 +225,33 @@ hs_final_annotations$rn <- NULL
 hs_length <- hs_final_annotations[, c("ensembl_gene_id", "cds_length")]
 colnames(hs_length) <- c("ID", "length")
 
-hs_pbmc <- create_expt(
+chosen_colors <- c("#009900","#990000", "#000099")
+names(chosen_colors) <- c("uninf","chr","sh")
+
+hs_cds_pbmc <- create_expt(
     metadata=glue::glue("sample_sheets/pbmc_samples_{ver}.xlsx"),
     gene_info=hs_final_annotations,
     file_column="humanfile",
-    notes=note)
-hs_inf <- create_expt(
+    notes=note) %>%
+  set_expt_colors(colors=chosen_colors) %>%
+  exclude_genes_expt(method="keep",
+                     column="gene_biotype",
+                     patterns="protein_coding")
+hs_cds_inf <- create_expt(
     metadata=glue::glue("sample_sheets/pbmc_samples_removetwo_{ver}.xlsx"),
     gene_info=hs_final_annotations,
     file_column="humanfile",
-    notes=note)
-chosen_colors <- c("#009900","#990000", "#000099")
-names(chosen_colors) <- c("uninf","chr","sh")
-hs_pbmc <- set_expt_colors(hs_pbmc, colors=chosen_colors)
-hs_inf <- set_expt_colors(hs_inf, colors=chosen_colors)
+    notes=note) %>%
+  set_expt_colors(colors=chosen_colors) %>%
+  exclude_genes_expt(method="keep",
+                     column="gene_biotype",
+                     patterns="protein_coding")
 
-inf_newnames <- paste0(pData(hs_inf)$label, "_", pData(hs_inf)$donor)
-hs_inf <- set_expt_samplenames(hs_inf, newnames=inf_newnames)
-
-hs_cds_pbmc <- exclude_genes_expt(hs_pbmc, method="keep",
-                                  column="gene_biotype",
-                                  patterns="protein_coding")
-hs_cds_inf <- exclude_genes_expt(hs_inf, method="keep",
-                                 column="gene_biotype",
-                                 patterns="protein_coding")
+## Finally, set the sample names to make figures look nice
+pbmc_newnames <- pData(hs_cds_pbmc)[["figurelabel"]]
+hs_cds_pbmc <- set_expt_samplenames(hs_cds_pbmc, newnames=pbmc_newnames)
+inf_newnames <- pData(hs_cds_inf)[["figurelabel"]]
+hs_cds_inf <- set_expt_samplenames(hs_cds_inf, newnames=inf_newnames)
 ```
 
 ## The parasite transcriptome mappings
@@ -286,8 +289,15 @@ hs_inf_write <- write_expt(
 ## Step 1, all samples (cds only) including uninfected samples.
 pbmc_norm <- normalize_expt(hs_cds_pbmc, transform="log2", convert="cpm",
                             norm="quant", filter=TRUE)
-plt <- plot_pca(pbmc_norm, plot_labels=FALSE)$plot
-pp(file="figures/fig_2a.tiff", image=plt)
+shortnames <- pData(hs_cds_pbmc)[["label"]]
+plt <- plot_pca(pbmc_norm, label_size=5, plot_labels=FALSE)$plot +
+                geom_text_repel(check_overlap=TRUE, aes(label=shortnames),
+                                max.overlaps = 100,
+                                size=6, box.padding=ggplot2::unit(0.5, "lines"),
+                                point.padding = ggplot2::unit(1.6, "lines"),
+                                arrow = ggplot2::arrow(length = ggplot2::unit(0.01, "npc")))
+
+pp(file="figures/fig_2a.pdf", image=plt)
 plt
 
 ## Step 1a.
@@ -301,16 +311,27 @@ plt
 ## Step 2, drop the uninfected samples and repeat.
 hs_minus <- subset_expt(hs_cds_pbmc, subset="condition!='uninf'")
 ## minus_norm <- normalize_expt(hs_minus, transform="log2", convert="cpm", norm="quant", filter=TRUE)
+shortnames <- pData(hs_minus)[["label"]]
 minus_norm <- normalize_expt(hs_minus, convert="cpm", norm="quant", filter=TRUE, transform="log2")
-plt <- plot_pca(minus_norm, plot_labels=FALSE)$plot
-pp(file="figures/fig_2b.tif", image=plt)
+plt <- plot_pca(minus_norm, plot_labels=FALSE)$plot +
+                geom_text_repel(check_overlap=TRUE, aes(label=shortnames),
+                                max.overlaps = 100,
+                                size=6, box.padding=ggplot2::unit(0.5, "lines"),
+                                point.padding = ggplot2::unit(1.6, "lines"),
+                                arrow = ggplot2::arrow(length = ggplot2::unit(0.01, "npc")))
+pp(file="figures/fig_2b.pdf", image=plt)
 plt
 
 ## Step 2a
 ##minus_nb <- normalize_expt(hs_minus, transform="log2", convert="cpm", filter=TRUE, batch="svaseq")
 minus_nb <- normalize_expt(hs_minus, convert="cpm", filter=TRUE, batch="svaseq", transform="log2")
-plt <- plot_pca(minus_nb, plot_labels=FALSE)$plot
-pp(file="figures/fig_2c.tiff", image=plt)
+plt <- plot_pca(minus_nb, plot_labels=FALSE)$plot +
+                geom_text_repel(check_overlap=TRUE, aes(label=shortnames),
+                                max.overlaps = 100,
+                                size=6, box.padding=ggplot2::unit(0.5, "lines"),
+                                point.padding = ggplot2::unit(1.6, "lines"),
+                                arrow = ggplot2::arrow(length = ggplot2::unit(0.01, "npc")))
+pp(file="figures/fig_2c.pdf", image=plt)
 plt
 
 ## Step 3, drop the problematic samples and repeat.
@@ -399,11 +420,12 @@ similarities <- compare_de_results(pbmc_tables, minus_tables)
 
 ```{r s1_figures}
 pbmc_s1_libsize <- plot_libsize(hs_cds_pbmc)
-pp(file="images/pbmc_s1_libsize.pdf", image=pbmc_s1_libsize$plot)
+pp(file="figures/pbmc_s1_libsize.pdf", image=pbmc_s1_libsize$plot)
 
-pbmc_heat_norm <- normalize_expt(hs_cds_pbmc, filter=TRUE, batch="svaseq", transform="log2")
-pbmc_s1_heat <- plot_disheat(pbmc_heat_norm)
-pp(file="images/pbmc_s1_disheat.pdf", image=pbmc_s1_heat)
+pbmc_heat_norm <- normalize_expt(hs_cds_pbmc, filter=TRUE, batch="svaseq",
+                                 convert="cpm", transform="log2")
+pbmc_s1_heat <- plot_disheat(pbmc_heat_norm, cexRow=1.5, cexCol=1.5)
+pp(file="figures/pbmc_s1_disheat.pdf", image=pbmc_s1_heat)
 ```
 
 ## Try out upsetr with the following for the pbmc data

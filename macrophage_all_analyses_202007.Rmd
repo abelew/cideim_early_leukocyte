@@ -332,7 +332,7 @@ new_colors <- c("#009900", "#990000", "#000099")
 names(new_colors) <- c("uninf", "chr", "sh")
 
 hs_macr <- set_expt_colors(hs_macr, colors=new_colors)
-labels <- as.character(pData(hs_macr)[["label"]])
+labels <- as.character(pData(hs_macr)[["figurelabel"]])
 hs_macr <- set_expt_samplenames(hs_macr, labels)
 
 hs_cds_macr <- set_expt_colors(hs_cds_macr, colors=new_colors)
@@ -401,19 +401,23 @@ fig_s1 <- sm(write_expt(
     transform="log2", batch="svaseq", filter=TRUE,
     excel=paste0("excel/figure_s1_sample_estimation-v", ver, ".xlsx")))
 
-pp(file="figures/fig_s2a_libsizes.tif", image=fig_s1$raw_libsize)
-pp(file="figures/fig_s2b_heatmap.tif", image=fig_s1$norm_disheat)
+pp(file="figures/fig_s2a_libsizes.pdf", image=fig_s1$raw_libsize)
+
+pp(file="figures/fig_s2b_heatmap.pdf", image=fig_s1$norm_disheat)
 
 hs_cdsn <- normalize_expt(hs_cds_macr, filter=TRUE, norm="quant",
                           convert="cpm", transform="log2")
+
 pp(file="figures/fig_2sc_raw_pca.tif",
-   image=plot_pca(hs_cdsn, plot_labels=FALSE)$plot)
+   image=plot_pca(hs_cdsn)$plot)
+
 hs_cdsnb <- normalize_expt(hs_cds_macr, filter=TRUE, batch="svaseq",
                            convert="cpm", transform="log2")
-pp(file="figures/fig_4a_norm_pca.tif",
-   image=plot_pca(hs_cdsnb, plot_labels=FALSE)$plot)
-##pp(file="figures/fig_s2c_raw_pca.tif", image=fig_s1$raw_scaled_pca)
-##pp(file="figures/fig_4a_norm_pca.tif", image=fig_s1$norm_pca)
+hs_cdsnb_pca <- plot_pca(hs_cdsnb, label_size=6)
+pp(file="figures/fig_4a_norm_pca.pdf", image=hs_cdsnb_pca$plot)
+
+nb_disheat <- plot_disheat(hs_cdsnb, cexRow=1.6, cexCol=1.6)
+pp(file="figures/fig_s2b_heatmap.pdf", image=nb_disheat$plot)
 ```
 
 # Differential Expression, Macrophage: `r ver`
